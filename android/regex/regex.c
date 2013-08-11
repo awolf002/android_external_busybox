@@ -209,6 +209,38 @@ init_syntax_once ()
 #define NULL (void *)0
 #endif
 
+#ifdef BYTE
+# define CHAR_T char
+# define UCHAR_T unsigned char
+# define COMPILED_BUFFER_VAR bufp->buffer
+# define OFFSET_ADDRESS_SIZE 2
+# define PREFIX(name) byte_##name
+# define ARG_PREFIX(name) name
+# define PUT_CHAR(c) putchar (c)
+#else
+# ifdef WCHAR
+#  define CHAR_T wchar_t
+#  define UCHAR_T wchar_t
+#  define COMPILED_BUFFER_VAR wc_buffer
+#  define OFFSET_ADDRESS_SIZE 1 /* the size which STORE_NUMBER macro use */
+#  define CHAR_CLASS_SIZE (__alignof__(wctype_t)+sizeof(wctype_t))/sizeof(CHAR_T)+1)
+#  define PREFIX(name) wcs_##name
+#  define ARG_PREFIX(name) c##name
+/* Should we use wide stream??  */
+#  define PUT_CHAR(c) printf ("%C", c);
+#  define TRUE 1
+#  define FALSE 0
+# else
+#  define CHAR_T char
+#  define UCHAR_T unsigned char
+#  define COMPILED_BUFFER_VAR bufp->buffer
+#  define OFFSET_ADDRESS_SIZE 2
+#  define PREFIX(name) byte_##name
+#  define ARG_PREFIX(name) name
+#  define PUT_CHAR(c) putchar (c)
+# endif
+#endif
+
 /* We remove any previous definition of `SIGN_EXTEND_CHAR',
    since ours (we hope) works properly with all combinations of
    machines, compilers, `char' and `unsigned char' argument types.
@@ -488,7 +520,7 @@ typedef enum
 #define STORE_NUMBER_AND_INCR(destination, number)			\
   do {									\
     STORE_NUMBER (destination, number);					\
-    (destination) += 2;							\
+    (destination) += OFFSET_ADDRESS_SIZE;				\
   } while (0)
 
 /* Put into DESTINATION a number stored in two contiguous bytes starting
@@ -524,7 +556,7 @@ extract_number (dest, source)
 #define EXTRACT_NUMBER_AND_INCR(destination, source)			\
   do {									\
     EXTRACT_NUMBER (destination, source);				\
-    (source) += 2;							\
+    (source) += OFFSET_ADDRESS_SIZE;					\
   } while (0)
 
 #ifdef DEBUG
@@ -534,7 +566,7 @@ extract_number_and_incr (destination, source)
     unsigned char **source;
 {
   extract_number (destination, *source);
-  *source += 2;
+  *source += OFFSET_ADDRESS_SIZE;
 }
 
 #ifndef EXTRACT_MACROS
@@ -1388,7 +1420,7 @@ static char reg_unset_dummy;
 /* Subroutine declarations and macros for regex_compile.  */
 
 static void store_op1 (), store_op2 ();
-static void insert_op1 (), insert_op2 ();
+static void byte_insert_op1 (), byte_insert_op2 ();
 static boolean at_begline_loc_p (), at_endline_loc_p ();
 static boolean group_in_compile_stack ();
 static reg_errcode_t compile_range ();
@@ -1466,20 +1498,19 @@ static reg_errcode_t compile_range ();
 /* Store a jump with opcode OP at LOC to location TO.  We store a
    relative address offset by the three bytes the jump itself occupies.	 */
 #define STORE_JUMP(op, loc, to) \
-  store_op1 (op, loc, (to) - (loc) - 3)
+  store_op1 (op, loc, (int) ((to) - (loc) - (1 + OFFSET_ADDRESS_SIZE)))
 
 /* Likewise, for a two-argument jump.  */
 #define STORE_JUMP2(op, loc, to, arg) \
-  store_op2 (op, loc, (to) - (loc) - 3, arg)
+  store_op2 (op, loc, (int) ((to) - (loc) - (1 + OFFSET_ADDRESS_SIZE)), arg)
 
 /* Like `STORE_JUMP', but for inserting.  Assume `b' is the buffer end.	 */
 #define INSERT_JUMP(op, loc, to) \
-  insert_op1 (op, loc, (to) - (loc) - 3, b)
+  PREFIX(insert_op1) (op, loc, (int) ((to) - (loc) - (1 + OFFSET_ADDRESS_SIZE)), b)
 
 /* Like `STORE_JUMP2', but for inserting.  Assume `b' is the buffer end.  */
 #define INSERT_JUMP2(op, loc, to, arg) \
-  insert_op2 (op, loc, (to) - (loc) - 3, arg, b)
-
+  PREFIX(insert_op2) (op, loc, (int) ((to) - (loc) - (1 + OFFSET_ADDRESS_SIZE), arg, b)
 
 /* This is not an arbitrary limit: the arguments which represent offsets
    into the pattern are two bytes long.	 So if 2^16 bytes turns out to
@@ -1899,7 +1930,7 @@ regex_compile (pattern, size, syntax, bufp)
 		assert (p - 1 > pattern);
 
 		/* Allocate the space for the jump.  */
-		GET_BUFFER_SPACE (3);
+		GET_BUFFER_SPACE (1 + OFFSET_ADDRESS_SIZE);
 
 		/* We know we are not at the first character of the pattern,
 		   because laststart was nonzero.  And we've already
@@ -1916,20 +1947,21 @@ regex_compile (pattern, size, syntax, bufp)
 		  }
 		else
 		  /* Anything else.  */
-		  STORE_JUMP (maybe_pop_jump, b, laststart - 3);
+		  STORE_JUMP (maybe_pop_jump, b, laststart -
+		             (1 + OFFSET_ADDRESS_SIZE));
 
 		/* We've added more stuff to the buffer.  */
-		b += 3;
+		b += 1 + OFFSET_ADDRESS_SIZE;
 	      }
 
 	    /* On failure, jump from laststart to b + 3, which will be the
 	       end of the buffer after this jump is inserted.  */
-	    GET_BUFFER_SPACE (3);
+	    GET_BUFFER_SPACE (1 + OFFSET_ADDRESS_SIZE);
 	    INSERT_JUMP (keep_string_p ? on_failure_keep_string_jump
 				       : on_failure_jump,
-			 laststart, b + 3);
+			 laststart, b + 1 + OFFSET_ADDRESS_SIZE);
 	    pending_exact = 0;
-	    b += 3;
+	    b += 1 + OFFSET_ADDRESS_SIZE;
 
 	    if (!zero_times_ok)
 	      {
@@ -1938,9 +1970,10 @@ regex_compile (pattern, size, syntax, bufp)
 		   `on_failure_jump' instruction of the loop. This
 		   effects a skip over that instruction the first time
 		   we hit that loop.  */
-		GET_BUFFER_SPACE (3);
-		INSERT_JUMP (dummy_failure_jump, laststart, laststart + 6);
-		b += 3;
+		GET_BUFFER_SPACE (1 + OFFSET_ADDRESS_SIZE);
+		INSERT_JUMP (dummy_failure_jump, laststart, laststart +
+		            2 + 2 * OFFSET_ADDRESS_SIZE);
+		b += 1 + OFFSET_ADDRESS_SIZE;
 	      }
 	    }
 	  break;
@@ -2310,10 +2343,11 @@ regex_compile (pattern, size, syntax, bufp)
 
 	      /* Insert before the previous alternative a jump which
 		 jumps to this alternative if the former fails.	 */
-	      GET_BUFFER_SPACE (3);
-	      INSERT_JUMP (on_failure_jump, begalt, b + 6);
+	      GET_BUFFER_SPACE (1 + OFFSET_ADDRESS_SIZE);
+	      INSERT_JUMP (on_failure_jump, begalt,
+		          b + 2 + 2 * OFFSET_ADDRESS_SIZE);
 	      pending_exact = 0;
-	      b += 3;
+	      b += 1 + OFFSET_ADDRESS_SIZE;
 
 	      /* The alternative before this one has a jump after it
 		 which gets executed if it gets matched.  Adjust that
@@ -2338,8 +2372,8 @@ regex_compile (pattern, size, syntax, bufp)
 		 to be filled in later either by next alternative or
 		 when know we're at the end of a series of alternatives.  */
 	      fixup_alt_jump = b;
-	      GET_BUFFER_SPACE (3);
-	      b += 3;
+	      GET_BUFFER_SPACE (1 + OFFSET_ADDRESS_SIZE);
+	      b += 1 + OFFSET_ADDRESS_SIZE;
 
 	      laststart = 0;
 	      begalt = b;
@@ -2394,25 +2428,19 @@ regex_compile (pattern, size, syntax, bufp)
 
 		if (!(syntax & RE_NO_BK_BRACES))
 		  {
-		    if (c != '\\') FREE_STACK_RETURN (REG_EBRACE);
-
+		    if (c != '\\' || p == pend)
+		        goto invalid_interval;
 		    PATFETCH (c);
 		  }
 
 		if (c != '}')
-		  {
-		    if (syntax & RE_NO_BK_BRACES)
-		      goto unfetch_interval;
-		    else
-		      FREE_STACK_RETURN (REG_BADBR);
-		  }
-
-		/* We just parsed a valid interval.  */
+		  goto invalid_interval;
 
 		/* If it's invalid to have no preceding re.  */
 		if (!laststart)
 		  {
-		    if (syntax & RE_CONTEXT_INVALID_OPS)
+		    if (syntax & RE_CONTEXT_INVALID_OPS
+		        && !(syntax & RE_INVALID_INTERVAL_ORD))
 		      FREE_STACK_RETURN (REG_BADRPT);
 		    else if (syntax & RE_CONTEXT_INDEP_OPS)
 		      laststart = b;
@@ -2420,14 +2448,20 @@ regex_compile (pattern, size, syntax, bufp)
 		      goto unfetch_interval;
 		  }
 
+		/* We just parsed a valid interval.  */
+		if (RE_DUP_MAX < upper_bound)
+		  FREE_STACK_RETURN (REG_BADBR);
+
 		/* If the upper bound is zero, don't want to succeed at
 		   all; jump from `laststart' to `b + 3', which will be
 		   the end of the buffer after we insert the jump.  */
+		/* ifdef WCHAR, 'b + 1 + OFFSET_ADDRESS_SIZE'
+		   instead of 'b + 3'.  */
 		 if (upper_bound == 0)
 		   {
-		     GET_BUFFER_SPACE (3);
-		     INSERT_JUMP (jump, laststart, b + 3);
-		     b += 3;
+		     GET_BUFFER_SPACE (1 + OFFSET_ADDRESS_SIZE);
+		     INSERT_JUMP (jump, laststart, b + 1 + OFFSET_ADDRESS_SIZE);
+		     b += 1 + OFFSET_ADDRESS_SIZE;
 		   }
 
 		 /* Otherwise, we have a nontrivial interval.  When
@@ -2442,7 +2476,8 @@ regex_compile (pattern, size, syntax, bufp)
 		 else
 		   { /* If the upper bound is > 1, we need to insert
 			more at the end of the loop.  */
-		     unsigned nbytes = 10 + (upper_bound > 1) * 10;
+		     unsigned nbytes = 2 + 4 * OFFSET_ADDRESS_SIZE +
+		       (upper_bound > 1) * (2 + 4 * OFFSET_ADDRESS_SIZE);
 
 		     GET_BUFFER_SPACE (nbytes);
 
@@ -2452,16 +2487,18 @@ regex_compile (pattern, size, syntax, bufp)
 			because `re_compile_fastmap' needs to know.
 			Jump to the `jump_n' we might insert below.  */
 		     INSERT_JUMP2 (succeed_n, laststart,
-				   b + 5 + (upper_bound > 1) * 5,
+				   b + 1 + 2 * OFFSET_ADDRESS_SIZE
+				   + (upper_bound > 1) * (1 + 2 * OFFSET_ADDRESS_SIZE),
 				   lower_bound);
-		     b += 5;
+		     b += 1 + 2 * OFFSET_ADDRESS_SIZE;
 
 		     /* Code to initialize the lower bound.  Insert
 			before the `succeed_n'.	 The `5' is the last two
 			bytes of this `set_number_at', plus 3 bytes of
 			the following `succeed_n'.  */
-		     insert_op2 (set_number_at, laststart, 5, lower_bound, b);
-		     b += 5;
+		     PREFIX(insert_op2) (set_number_at, laststart, 1
+					+ 2 * OFFSET_ADDRESS_SIZE, lower_bound, b);
+		     b += 1 + 2 * OFFSET_ADDRESS_SIZE;
 
 		     if (upper_bound > 1)
 		       { /* More than one repetition is allowed, so
@@ -2471,9 +2508,10 @@ regex_compile (pattern, size, syntax, bufp)
 			    When we've reached this during matching,
 			    we'll have matched the interval once, so
 			    jump back only `upper_bound - 1' times.  */
-			 STORE_JUMP2 (jump_n, b, laststart + 5,
+			 STORE_JUMP2 (jump_n, b, laststart
+				      + 2 * OFFSET_ADDRESS_SIZE + 1,
 				      upper_bound - 1);
-			 b += 5;
+			 b += 1 + 2 * OFFSET_ADDRESS_SIZE;
 
 			 /* The location we want to set is the second
 			    parameter of the `jump_n'; that is `b-2' as
@@ -2489,15 +2527,21 @@ regex_compile (pattern, size, syntax, bufp)
 			    We insert this at the beginning of the loop
 			    so that if we fail during matching, we'll
 			    reinitialize the bounds.  */
-			 insert_op2 (set_number_at, laststart, b - laststart,
-				     upper_bound - 1, b);
-			 b += 5;
+			PREFIX(insert_op2) (set_number_at, laststart,
+					b - laststart,
+					upper_bound - 1, b);
+
+			 b += 1 + 2 * OFFSET_ADDRESS_SIZE;
 		       }
 		   }
 		pending_exact = 0;
 		beg_interval = NULL;
 	      }
 	      break;
+
+	    invalid_interval:
+	       if (!(syntax & RE_INVALID_INTERVAL_ORD))
+	         FREE_STACK_RETURN (p == pend ? REG_EBRACE : REG_BADBR);
 
 	    unfetch_interval:
 	      /* If an invalid interval, match the characters as literals.  */
@@ -2741,7 +2785,7 @@ store_op2 (op, loc, arg1, arg2)
 {
   *loc = (unsigned char) op;
   STORE_NUMBER (loc + 1, arg1);
-  STORE_NUMBER (loc + 3, arg2);
+  STORE_NUMBER (loc + 1 + OFFSET_ADDRESS_SIZE, arg2);
 }
 
 
@@ -2749,14 +2793,14 @@ store_op2 (op, loc, arg1, arg2)
    for OP followed by two-byte integer parameter ARG.  */
 
 static void
-insert_op1 (op, loc, arg, end)
+PREFIX(insert_op1) (op, loc, arg, end)
     re_opcode_t op;
     unsigned char *loc;
     int arg;
     unsigned char *end;
 {
   register unsigned char *pfrom = end;
-  register unsigned char *pto = end + 3;
+  register unsigned char *pto = end + 1 + OFFSET_ADDRESS_SIZE;
 
   while (pfrom != loc)
     *--pto = *--pfrom;
@@ -2768,14 +2812,14 @@ insert_op1 (op, loc, arg, end)
 /* Like `insert_op1', but for two two-byte parameters ARG1 and ARG2.  */
 
 static void
-insert_op2 (op, loc, arg1, arg2, end)
+PREFIX(insert_op2) (op, loc, arg1, arg2, end)
     re_opcode_t op;
     unsigned char *loc;
     int arg1, arg2;
     unsigned char *end;
 {
   register unsigned char *pfrom = end;
-  register unsigned char *pto = end + 5;
+  register unsigned char *pto = end + 1 + 2 * OFFSET_ADDRESS_SIZE;
 
   while (pfrom != loc)
     *--pto = *--pfrom;
@@ -3162,13 +3206,13 @@ re_compile_fastmap (bufp)
 
 	case succeed_n:
 	  /* Get to the number of times to succeed.  */
-	  p += 2;
+	  p += OFFSET_ADDRESS_SIZE;
 
 	  /* Increment p past the n for when k != 0.  */
 	  EXTRACT_NUMBER_AND_INCR (k, p);
 	  if (k == 0)
 	    {
-	      p -= 4;
+	      p -= 2 * OFFSET_ADDRESS_SIZE;
 	      succeed_n_p = true;  /* Spaghetti code alert.  */
 	      goto handle_on_failure_jump;
 	    }
@@ -3176,7 +3220,7 @@ re_compile_fastmap (bufp)
 
 
 	case set_number_at:
-	  p += 4;
+	  p += 2 * OFFSET_ADDRESS_SIZE;
 	  continue;
 
 
@@ -4196,7 +4240,7 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 		  case dummy_failure_jump:
 		    EXTRACT_NUMBER_AND_INCR (mcnt, p1);
 		    if (is_a_jump_n)
-		      p1 += 2;
+		      p1 += OFFSET_ADDRESS_SIZE;
 		    break;
 
 		  default:
@@ -4210,7 +4254,8 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 		 by forcing a failure after pushing on the stack the
 		 on_failure_jump's jump in the pattern, and d.	*/
 	      if (mcnt < 0 && (re_opcode_t) *p1 == on_failure_jump
-		  && (re_opcode_t) p1[3] == start_memory && p1[4] == *p)
+		  && (re_opcode_t) p1[1+OFFSET_ADDRESS_SIZE] == start_memory
+		   && p1[2+OFFSET_ADDRESS_SIZE] == *p)
 		{
 		  /* If this group ever matched anything, then restore
 		     what its registers were before trying this last
@@ -4453,7 +4498,7 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 	  EXTRACT_NUMBER_AND_INCR (mcnt, p);
 	  DEBUG_PRINT2 ("EXECUTING maybe_pop_jump %d.\n", mcnt);
 	  {
-	    register unsigned char *p2 = p;
+	    register UCHAR_T *p2 = p;
 
 	    /* Compare the beginning of the repeat with what in the
 	       pattern follows its end. If we can establish that there
@@ -4478,9 +4523,9 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 		    && ((re_opcode_t) *p2 == stop_memory
 			|| (re_opcode_t) *p2 == start_memory))
 		  p2 += 3;
-		else if (p2 + 6 < pend
+		else if (p2 + 2 + 2 * OFFSET_ADDRESS_SIZE < pend
 			 && (re_opcode_t) *p2 == dummy_failure_jump)
-		  p2 += 6;
+		  p2 += 2 + 2 * OFFSET_ADDRESS_SIZE;
 		else
 		  break;
 	      }
@@ -4496,20 +4541,28 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 		/* Consider what happens when matching ":\(.*\)"
 		   against ":/".  I don't really understand this code
 		   yet.	 */
-		p[-3] = (unsigned char) pop_failure_jump;
+		p[-(1+OFFSET_ADDRESS_SIZE)] = (UCHAR_T) pop_failure_jump;
 		DEBUG_PRINT1
 		  ("  End of pattern: change to `pop_failure_jump'.\n");
 	      }
 
 	    else if ((re_opcode_t) *p2 == exactn
+#ifdef MBS_SUPPORT
+		     || (re_opcode_t) *p2 == exactn_bin
+#endif
 		     || (bufp->newline_anchor && (re_opcode_t) *p2 == endline))
 	      {
-		register unsigned char c
-		  = *p2 == (unsigned char) endline ? '\n' : p2[2];
+		register UCHAR_T c
+		  = *p2 == (UCHAR_T) endline ? '\n' : p2[2];
 
-		if ((re_opcode_t) p1[3] == exactn && p1[5] != c)
+		if (((re_opcode_t) p1[1+OFFSET_ADDRESS_SIZE] == exactn
+#ifdef MBS_SUPPORT
+		    || (re_opcode_t) p1[1+OFFSET_ADDRESS_SIZE] == exactn_bin
+#endif
+		    ) && p1[3+OFFSET_ADDRESS_SIZE] != c)
 		  {
-		    p[-3] = (unsigned char) pop_failure_jump;
+		    p[-(1+OFFSET_ADDRESS_SIZE)] = (UCHAR_T) pop_failure_jump;
+
 		    DEBUG_PRINT3 ("  %c != %c => pop_failure_jump.\n",
 				  c, p1[5]);
 		  }
@@ -4519,7 +4572,7 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 		  {
 		    int not = (re_opcode_t) p1[3] == charset_not;
 
-		    if (c < (unsigned char) (p1[4] * BYTEWIDTH)
+		    if (c < (UCHAR_T) (p1[4] * BYTEWIDTH)
 			&& p1[5 + c / BYTEWIDTH] & (1 << (c % BYTEWIDTH)))
 		      not = !not;
 
@@ -4527,7 +4580,7 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 			that we can't change to pop_failure_jump.  */
 		    if (!not)
 		      {
-			p[-3] = (unsigned char) pop_failure_jump;
+			p[-3] = (UCHAR_T) pop_failure_jump;
 			DEBUG_PRINT1 ("	 No match => pop_failure_jump.\n");
 		      }
 		  }
@@ -4535,8 +4588,8 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 	    else if ((re_opcode_t) *p2 == charset)
 	      {
 #ifdef DEBUG
-		register unsigned char c
-		  = *p2 == (unsigned char) endline ? '\n' : p2[2];
+		register UCHAR_T c
+		  = *p2 == (UCHAR_T) endline ? '\n' : p2[2];
 #endif
 
 		if ((re_opcode_t) p1[3] == exactn
@@ -4544,7 +4597,7 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 			  && (p2[2 + p1[5] / BYTEWIDTH]
 			      & (1 << (p1[5] % BYTEWIDTH)))))
 		  {
-		    p[-3] = (unsigned char) pop_failure_jump;
+		    p[-3] = (UCHAR_T) pop_failure_jump;
 		    DEBUG_PRINT3 ("  %c != %c => pop_failure_jump.\n",
 				  c, p1[5]);
 		  }
@@ -4562,7 +4615,7 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
 
 		    if (idx == p2[1])
 		      {
-			p[-3] = (unsigned char) pop_failure_jump;
+			p[-3] = (UCHAR_T) pop_failure_jump;
 			DEBUG_PRINT1 ("	 No match => pop_failure_jump.\n");
 		      }
 		  }
@@ -5342,7 +5395,7 @@ regcomp (preg, pattern, cflags)
      every character.  */
   preg->fastmap = 0;
 
-  if (cflags & REG_ICASE)
+  if (cflags & (REG_ICASE | REG_ICASE))
     {
       unsigned i;
 
