@@ -4,6 +4,8 @@ BB_PATH := $(LOCAL_PATH)
 # Bionic Branches Switches (CM7/AOSP/ICS)
 BIONIC_ICS := true
 
+NDK_PATH := prebuilts/ndk/8/platforms/android-14/
+NDK_INCLUDE_PATH := $(NDK_PATH)/arch-arm/usr/include
 
 # Make a static library for regex.
 include $(CLEAR_VARS)
@@ -142,6 +144,7 @@ BUSYBOX_CONFIG:=full
 BUSYBOX_SUFFIX:=bionic
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
 ifeq ($(BIONIC_ICS),true)
+BUSYBOX_C_INCLUDES += android/libc/arch-arm/usr/include
 LOCAL_SRC_FILES += android/libc/__set_errno.c
 endif
 LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
@@ -182,6 +185,10 @@ BUSYBOX_CONFIG:=full
 BUSYBOX_SUFFIX:=static
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
 LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
+ifeq ($(BIONIC_ICS),true)
+BUSYBOX_C_INCLUDES += android/libc/arch-arm/usr/include
+LOCAL_SRC_FILES += android/libc/__set_errno.c
+endif
 LOCAL_CFLAGS := $(BUSYBOX_CFLAGS)
 LOCAL_CFLAGS += \
   -Dgetusershell=busybox_getusershell \
