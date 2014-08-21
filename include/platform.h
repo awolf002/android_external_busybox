@@ -452,8 +452,6 @@ typedef unsigned smalluint;
 #if defined(ANDROID) || defined(__ANDROID__)
 # undef HAVE_DPRINTF
 # undef HAVE_FDPRINTF
-# undef HAVE_GETLINE
-# undef HAVE_STPCPY
 # undef HAVE_STRCHRNUL
 # undef HAVE_STRVERSCMP
 # undef HAVE_UNLOCKED_LINE_OPS
