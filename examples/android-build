@@ -14,9 +14,9 @@ export A="$HOME/android"
 P=zoom2
 
 # Toolchain version in use by this version of Android
-GCCVER=4.4.3
+GCCVER=4.7
 
-export PATH="$A/prebuilt/linux-x86/toolchain/arm-eabi-$GCCVER/bin:$PATH"
+export PATH="$A/rebuilts/gcc/linux-x86/x86/i686-linux-android-$GCCVER/bin:$PATH"
 
 # Set the linker flags; compiler flags are in the defconfig file
 if grep "^CONFIG_STATIC=y" .config >/dev/null ; then
