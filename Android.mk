@@ -4,8 +4,13 @@ BB_PATH := $(LOCAL_PATH)
 # Bionic Branches Switches (CM7/AOSP/ICS)
 BIONIC_ICS := true
 
-NDK_PATH := prebuilts/ndk/8/platforms/android-14/
+NDK_PATH := prebuilts/ndk/9/platforms/android-18/
+ifeq ($(TARGET_ARCH),arm)
 NDK_INCLUDE_PATH := $(NDK_PATH)/arch-arm/usr/include
+endif
+ifeq ($(TARGET_ARCH),x86)
+NDK_INCLUDE_PATH := $(NDK_PATH)/arch-x86/usr/include
+endif
 
 # Make a static library for regex.
 include $(CLEAR_VARS)
@@ -68,6 +73,16 @@ SUBMAKE := make -s -C $(BB_PATH) CC=$(CC)
 BUSYBOX_SRC_FILES = $(shell cat $(BB_PATH)/busybox-$(BUSYBOX_CONFIG).sources) \
 	libbb/android.c
 
+BUSYBOX_C_INCLUDES = \
+	$(BB_PATH)/include-$(BUSYBOX_CONFIG) \
+	$(BB_PATH)/include $(BB_PATH)/libbb \
+	bionic/libc/private \
+	bionic/libm/include \
+	bionic/libm \
+	libc/kernel/common \
+	$(BB_PATH)/android/regex \
+	$(BB_PATH)/android/librpc
+
 ifeq ($(TARGET_ARCH),arm)
 	BUSYBOX_SRC_FILES += \
 	android/libc/arch-arm/syscalls/adjtimex.S \
@@ -76,6 +91,20 @@ ifeq ($(TARGET_ARCH),arm)
 	android/libc/arch-arm/syscalls/swapon.S \
 	android/libc/arch-arm/syscalls/swapoff.S \
 	android/libc/arch-arm/syscalls/sysinfo.S
+
+	BUSYBOX_C_INCLUDES += $(BB_PATH)/android/libc/arch-arm/usr/include
+endif
+
+ifeq ($(TARGET_ARCH),x86)
+	BUSYBOX_SRC_FILES += \
+	android/libc/arch-x86/syscalls/adjtimex.S \
+	android/libc/arch-x86/syscalls/getsid.S \
+	android/libc/arch-x86/syscalls/stime.S \
+	android/libc/arch-x86/syscalls/swapon.S \
+	android/libc/arch-x86/syscalls/swapoff.S \
+	android/libc/arch-x86/syscalls/sysinfo.S
+
+	BUSYBOX_C_INCLUDES += $(BB_PATH)/android/libc/arch-x86/usr/include
 endif
 
 ifeq ($(TARGET_ARCH),mips)
@@ -86,17 +115,9 @@ ifeq ($(TARGET_ARCH),mips)
 	android/libc/arch-mips/syscalls/swapon.S \
 	android/libc/arch-mips/syscalls/swapoff.S \
 	android/libc/arch-mips/syscalls/sysinfo.S
-endif
 
-BUSYBOX_C_INCLUDES = \
-	$(BB_PATH)/include-$(BUSYBOX_CONFIG) \
-	$(BB_PATH)/include $(BB_PATH)/libbb \
-	bionic/libc/private \
-	bionic/libm/include \
-	bionic/libm \
-	libc/kernel/common \
-	$(BB_PATH)/android/regex \
-	$(BB_PATH)/android/librpc
+	BUSYBOX_C_INCLUDES += $(BB_PATH)/android/libc/arch-mips/usr/include
+endif
 
 BUSYBOX_CFLAGS = \
 	-Werror=implicit \
@@ -118,6 +139,13 @@ endif
 BUSYBOX_CONFIG:=minimal
 BUSYBOX_SUFFIX:=static
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
+
+ifeq ($(BIONIC_ICS),true)
+ifeq ($(TARGET_ARCH),arm)
+LOCAL_SRC_FILES += android/libc/__set_errno.c
+endif
+endif
+
 LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
 LOCAL_CFLAGS := -Dmain=busybox_driver $(BUSYBOX_CFLAGS)
 LOCAL_CFLAGS += \
@@ -143,10 +171,13 @@ include $(CLEAR_VARS)
 BUSYBOX_CONFIG:=full
 BUSYBOX_SUFFIX:=bionic
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
+
 ifeq ($(BIONIC_ICS),true)
-BUSYBOX_C_INCLUDES += android/libc/arch-arm/usr/include
+ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += android/libc/__set_errno.c
 endif
+endif
+
 LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
 LOCAL_CFLAGS := $(BUSYBOX_CFLAGS)
 LOCAL_MODULE := busybox
@@ -184,11 +215,14 @@ include $(CLEAR_VARS)
 BUSYBOX_CONFIG:=full
 BUSYBOX_SUFFIX:=static
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
-LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
+
 ifeq ($(BIONIC_ICS),true)
-BUSYBOX_C_INCLUDES += android/libc/arch-arm/usr/include
+ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += android/libc/__set_errno.c
 endif
+endif
+
+LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
 LOCAL_CFLAGS := $(BUSYBOX_CFLAGS)
 LOCAL_CFLAGS += \
   -Dgetusershell=busybox_getusershell \
