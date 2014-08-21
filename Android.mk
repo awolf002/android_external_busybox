@@ -141,7 +141,9 @@ BUSYBOX_SUFFIX:=static
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
 
 ifeq ($(BIONIC_ICS),true)
+ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += android/libc/__set_errno.c
+endif
 endif
 
 LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
@@ -171,7 +173,9 @@ BUSYBOX_SUFFIX:=bionic
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
 
 ifeq ($(BIONIC_ICS),true)
+ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += android/libc/__set_errno.c
+endif
 endif
 
 LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
@@ -211,6 +215,13 @@ include $(CLEAR_VARS)
 BUSYBOX_CONFIG:=full
 BUSYBOX_SUFFIX:=static
 LOCAL_SRC_FILES := $(BUSYBOX_SRC_FILES)
+
+ifeq ($(BIONIC_ICS),true)
+ifeq ($(TARGET_ARCH),arm)
+LOCAL_SRC_FILES += android/libc/__set_errno.c
+endif
+endif
+
 LOCAL_C_INCLUDES := $(BUSYBOX_C_INCLUDES)
 LOCAL_CFLAGS := $(BUSYBOX_CFLAGS)
 LOCAL_CFLAGS += \
