@@ -1,6 +1,6 @@
 /*
  * Automatically generated C config: don't edit
- * Busybox version: 1.21.1-jb
+ * Busybox version: 1.21.1-kk
  */
 #define AUTOCONF_TIMESTAMP "2013-07-01 01:03 +0200"
 
